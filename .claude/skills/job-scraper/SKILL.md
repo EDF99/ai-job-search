@@ -126,7 +126,7 @@ For each new job, do a rapid fit check (NOT the full evaluation from `04-job-eva
       "first_seen": "YYYY-MM-DD",
       "fit": "high/medium/low",
       "status": "new/skipped/evaluated/ranked/expired",
-      "portal": "<source portal skill, e.g. jobindex-search>"
+      "portal": "<source portal skill, e.g. linkedin-search>"
     }
   }
 }
