@@ -13,6 +13,68 @@ per-file diff commands.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-03
+
+### Added
+
+- **Language Gate** - no dimension or gate anywhere in the framework checked a posting's
+  language requirements against what the candidate actually speaks (not a Scoring Dimension,
+  not a `/scrape`/`/rank` field, nothing for `/apply`'s existing generic language detection
+  to report to). Adds that check, structured like the existing Eligibility Gate, on a new
+  structured `Languages` table in CLAUDE.md / `01-candidate-profile.md` (`/setup` asks, or
+  infers it from a CV/LinkedIn export): a posting requiring a language you haven't declared
+  at all is a hard **FAIL**; one requiring a higher level than you declared in a language you
+  *do* work in is **FLAG**, not an auto-reject, so borderline cases (a strict "fluent" bar vs.
+  your own B1/B2) get your judgment instead of a silent drop; a requirement at or below your
+  declared level is a clean **PASS**. Wired through `/scrape`, `/rank`, and `/apply`, with
+  `language_gate`/`language_note` persisted into `seen_jobs.json` alongside the existing
+  `location` veto so a re-read of the file (or a future debugging session) can recover why a
+  job did or didn't make the shortlist.
+
+### Fixed
+
+- **CV date fields now use ASCII hyphens, so the PDF text layer extracts cleanly** - the
+  stock template wrote date ranges as `[YYYY--YYYY]`, and on the repo's mandated `lualatex`
+  toolchain the `--` en-dash ligature extracts from the PDF as U+FFFD (`�`). The stock
+  template therefore failed the ATS checklist's own "no `�` replacement characters" item on
+  *every* date field, and did so silently: the rendered page looks correct, and no existing
+  check inspected the extracted text. `cv/main_example.tex` now uses `[YYYY-YYYY]` and
+  `[YYYY-Present]`, and `05-cv-templates.md` documents the failure mode and the check that
+  catches it (`framework_version` 1.3.0 to 1.4.0). The two-page layout budget is unaffected.
+
+  **Fork reconciliation note.** The five changed lines in `cv/main_example.tex` are the
+  `\cventry` date fields - three under Professional Experience, two under Education -
+  precisely the lines every fork personalizes. Rebasing forks should expect conflicts there,
+  resolve them in favour of *their own* dates, and then apply the same `--` to `-` change by
+  hand. To find remaining instances across your own CV variants:
+
+  ```
+  grep -rn '\\cventry{[^}]*--' cv/
+  ```
+
+  Verify afterwards by extracting the text layer and checking the date lines specifically:
+  `pdftotext -layout <file>.pdf - | grep '�'` - none of the hits may be a date field. (On
+  the stock template two benign hits remain either way: the decorative separators on the
+  contact and award lines, which are unrelated to dates and predate this fix.)
+
+- `tools/convert_salary_excel.py` now parses localized numeric string cells - Excel
+  exports that store numbers as text (a Danish `"108,5"`, `"1.234,5"`, or space-separated
+  thousands) previously hit `float()`'s `ValueError` and were silently dropped from
+  `salary_data.json`. The ambiguous single-comma-plus-three-digits pattern (`"1,234"`,
+  thousands in one locale and a decimal in another) is deliberately skipped rather than
+  guessed, preserving the old safe behaviour for the one case that cannot be
+  disambiguated. (#272)
+- `tools/check_upstream_updates.py` compares the template-repo slug case-insensitively -
+  GitHub serves repository paths case-insensitively, so a clone made from a lowercased
+  URL was a legitimate direct clone that nonetheless triggered #265's fork-vs-self
+  warning. (#273)
+
+### Changed
+
+- SETUP.md section 8 now shows the first-time `git remote add upstream ...` command
+  before telling you to `git fetch upstream`, which previously failed on any clone of a
+  personal fork with no explanation of the missing remote. (#274)
+
 ### Security & privacy
 
 - **The gitignore guard now covers every personal-output rule** - `security_guards.py`
@@ -34,6 +96,16 @@ per-file diff commands.
   Step 5 and then discarded. Both arrays are now stored verbatim and replaced (never
   accumulated) on `--all` re-ranks, so downstream consumers of `seen_jobs.json` can read
   real triage findings instead of re-deriving them. See
+  [discussion #258](https://github.com/MadsLorentzen/ai-job-search/discussions/258).
+- **`/upskill` aggregate mode now ingests `/rank`'s recorded gaps** - previously it only
+  read `job_search_tracker.csv` and *guessed* required skills from the `role`/`sector`/
+  `notes` columns, even though `/rank` had already fetched and scored postings that never
+  made it into the tracker. Aggregate mode now also reads ranked entries
+  (`rank_score >= 45`) from `job_scraper/seen_jobs.json`, dedupes them against tracker rows
+  on case-insensitive company+role, and prefers a job's recorded `gaps` over an inferred
+  skill list wherever both exist. The heatmap's Gap Source column now shows the
+  recorded-vs-inferred split per skill, and the report header states how many jobs came
+  from each source. Depends on #263 (`/rank` persisting `gaps`/`strengths`); see
   [discussion #258](https://github.com/MadsLorentzen/ai-job-search/discussions/258).
 
 ### Security & privacy
